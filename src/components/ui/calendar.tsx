@@ -5,10 +5,7 @@ import { DayPicker } from "react-day-picker";
 import { buttonVariants } from "../../components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
-  date: Date; // Change from `number` to `Date`
-  onDateChange: (date: Date) => void;
-};
+export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 function Calendar({
   className,
@@ -16,19 +13,6 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: CalendarProps) {
-  // Refactor class names for consistency
-  const nav_button_previous = cn(
-    "nav-button",
-    "nav-button-previous",
-    "hover:bg-gray-200"
-  );
-
-  const nav_button_next = cn(
-    "nav-button",
-    "nav-button-next",
-    "hover:bg-gray-200"
-  );
-
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -43,8 +27,8 @@ function Calendar({
           buttonVariants({ variant: "outline" }),
           "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100",
         ),
-        nav_button_previous,
-        nav_button_next,
+        nav_button_previous: "absolute left-1",
+        nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
         head_cell:
@@ -65,10 +49,6 @@ function Calendar({
         day_hidden: "invisible",
         ...classNames,
       }}
-      // components={{
-      //   IconLeft: ({ ...props }) => <ChevronLeftIcon className="h-4 w-4" />,
-      //   IconRight: ({ ...props }) => <ChevronRightIcon className="h-4 w-4" />,
-      // }}
       {...props}
     />
   );

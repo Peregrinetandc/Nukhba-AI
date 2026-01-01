@@ -33,7 +33,10 @@ const VoiceInteraction = ({
   const isRTL = language === "arabic";
 
   const getLocalizedText = (key: string) => {
-    const texts = {
+    const texts: Record<
+      "english" | "arabic" | "hindi",
+      Record<string, string>
+    > = {
       english: {
         recording: "Recording...",
         tapToSpeak: "Tap to speak",
@@ -238,7 +241,9 @@ const VoiceInteraction = ({
             <Languages className="h-4 w-4 text-muted-foreground" />
             <Select
               value={language}
-              onValueChange={(value) => onLanguageChange(value)}
+              onValueChange={(value) =>
+                onLanguageChange(value as "english" | "arabic" | "hindi")
+              }
             >
               <SelectTrigger className="w-32">
                 <SelectValue placeholder="Language" />
@@ -275,21 +280,3 @@ const VoiceInteraction = ({
 };
 
 export default VoiceInteraction;
-
-async function onRecordingComplete(recording: Blob) {
-  try {
-    const response = await uploadRecording(recording);
-    console.log("Recording uploaded successfully:", response);
-  } catch (error) {
-    console.error("Failed to upload recording:", error);
-  }
-}
-
-// Example data fetching and processing
-fetchData()
-  .then((data) => {
-    processData(data);
-  })
-  .catch((error) => {
-    console.error("Failed to fetch data:", error);
-  });
