@@ -13,6 +13,7 @@ import {
   Languages,
   RotateCcw,
   MessageSquare,
+  AlertCircle,
 } from "lucide-react";
 import {
   Select,
@@ -21,8 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { Alert, AlertDescription } from "./ui/alert";
 import VoiceInteraction from "./VoiceInteraction";
 import FeedbackForm from "./FeedbackForm";
+import { sendMessageToTutor } from "@/services/tutor";
+import { useVoiceInteraction } from "@/hooks/useVoiceInteraction";
 
 interface Message {
   id: string;
@@ -79,7 +83,22 @@ const AITutor = ({
         ],
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const isRTL = currentLanguage === "arabic";
+
+  const {
+    isListening,
+    isSpeaking,
+    transcript,
+    error: voiceError,
+    startListening,
+    stopListening,
+    speak,
+    stopSpeaking,
+    resetTranscript,
+  } = useVoiceInteraction({
+    language: currentLanguage,
+  });
 
   const getLocalizedText = (key: string) => {
     const texts: Record<
@@ -130,7 +149,7 @@ const AITutor = ({
     onLanguageChange(value);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
     const userMessage: Message = {
@@ -144,22 +163,49 @@ const AITutor = ({
     setChatMessages((prev) => [...prev, userMessage]);
     setInputText("");
     setIsProcessing(true);
+    setApiError(null);
 
-    setTimeout(() => {
+    try {
+      const conversationHistory = chatMessages
+        .filter((m) => m.sender !== "ai" || m.id !== "1")
+        .slice(-10)
+        .map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.content,
+        }));
+
+      conversationHistory.push({
+        role: "user",
+        content: inputText,
+      });
+
+      const response = await sendMessageToTutor(
+        conversationHistory as any,
+        currentLanguage,
+      );
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: getLocalizedText("aiResponse"),
+        content: response.answer,
         sender: "ai",
         timestamp: new Date(),
         language: currentLanguage,
       };
 
       setChatMessages((prevMessages) => [...prevMessages, aiResponse]);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to get response from AI tutor";
+      setApiError(errorMessage);
+      console.error("Send message error:", error);
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+    }
   };
 
-  const handleVoiceMessage = (transcription: string) => {
+  const handleVoiceMessage = async (transcription: string) => {
     if (!transcription.trim()) return;
 
     const userMessage: Message = {
@@ -172,19 +218,49 @@ const AITutor = ({
 
     setChatMessages((prev) => [...prev, userMessage]);
     setIsProcessing(true);
+    setApiError(null);
 
-    setTimeout(() => {
+    try {
+      const conversationHistory = chatMessages
+        .filter((m) => m.sender !== "ai" || m.id !== "1")
+        .slice(-10)
+        .map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.content,
+        }));
+
+      conversationHistory.push({
+        role: "user",
+        content: transcription,
+      });
+
+      const response = await sendMessageToTutor(
+        conversationHistory as any,
+        currentLanguage,
+      );
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: getLocalizedText("voiceResponse"),
+        content: response.answer,
         sender: "ai",
         timestamp: new Date(),
         language: currentLanguage,
       };
 
       setChatMessages((prevMessages) => [...prevMessages, aiResponse]);
+
+      await speak(response.answer);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to get response from AI tutor";
+      setApiError(errorMessage);
+      console.error("Voice message error:", error);
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+      resetTranscript();
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -246,6 +322,14 @@ const AITutor = ({
             </Button>
           </div>
         </div>
+        {(apiError || voiceError) && (
+          <Alert variant="destructive" className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {apiError || voiceError}
+            </AlertDescription>
+          </Alert>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <Tabs
@@ -295,9 +379,11 @@ const AITutor = ({
                         variant="ghost"
                         size="sm"
                         className="mt-1 hover:bg-primary/10"
+                        onClick={() => speak(message.content)}
+                        disabled={isSpeaking}
                       >
                         <Volume2 className="h-4 w-4 mr-1" />
-                        {getLocalizedText("listen")}
+                        {isSpeaking ? "Speaking..." : getLocalizedText("listen")}
                       </Button>
                     )}
                   </div>
@@ -352,18 +438,55 @@ const AITutor = ({
               </div>
             </TabsContent>
             <TabsContent value="voice" className="mt-0">
-              <VoiceInteraction
-                language={currentLanguage}
-                onRecordingComplete={(blob) => {
-                  setTimeout(() => {
-                    handleVoiceMessage(
-                      "This is a simulated voice transcription for testing purposes.",
-                    );
-                  }, 1000);
-                }}
-                onLanguageChange={handleLanguageChange}
-                isListening={isProcessing}
-              />
+              <div className="flex flex-col space-y-4 p-4">
+                <div className="flex items-center justify-center space-x-4">
+                  <Button
+                    onClick={startListening}
+                    disabled={isListening || isProcessing || isSpeaking}
+                    size="lg"
+                    className="rounded-full h-16 w-16"
+                  >
+                    <Mic className="h-6 w-6" />
+                  </Button>
+                  {isListening && (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-sm text-muted-foreground">
+                        Listening...
+                      </span>
+                    </div>
+                  )}
+                  {isSpeaking && (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-sm text-muted-foreground">
+                        Speaking...
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {transcript && (
+                  <div className="bg-muted p-3 rounded-lg">
+                    <p className="text-sm font-semibold text-muted-foreground mb-1">
+                      Recognized:
+                    </p>
+                    <p dir={isRTL ? "rtl" : "ltr"}>{transcript}</p>
+                  </div>
+                )}
+
+                {transcript && !isListening && !isProcessing && (
+                  <Button
+                    onClick={() => {
+                      handleVoiceMessage(transcript);
+                    }}
+                    disabled={isProcessing}
+                    className="w-full"
+                  >
+                    Send Response
+                  </Button>
+                )}
+              </div>
             </TabsContent>
           </div>
         </Tabs>
